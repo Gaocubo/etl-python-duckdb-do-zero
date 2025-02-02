@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from duckdb import DuckDBPyRelation
 from pandas import DataFrame
 
+load_dotenv()
+
 from datetime import datetime
 
 url_pasta = 'https://drive.google.com/drive/folders/1I0gkzrUS6Bast_nX95wDB4_qe1Lwwszw'
@@ -38,10 +40,15 @@ def ler_csv(caminho_do_arquivo):
 def transformar(df: DuckDBPyRelation) -> DataFrame:
     # Executa a consulta SQL que inclui a nova coluna, operando sobre a tabela virtual
     df_transformado = duckdb.sql("SELECT *, quantidade * valor AS total_vendas FROM df").df()
-
-    print(df_transformado)
     # Remove o registro da tabela virtual para limpeza
     return df_transformado
+
+# Função para converter o Duckdb em Pandas e salvar o DataFrame no PostgreSQL
+def salvar_no_postgres(df_duckdb, tabela):
+    DATABASE_URL = os.getenv("DATABASE_URL")  # Ex: 'postgresql://user:password@localhost:5432/database_name'
+    engine = create_engine(DATABASE_URL)
+    # Salvar o DataFrame no PostgreSQL
+    df_duckdb.to_sql(tabela, con=engine, if_exists='append', index=False)
 
 # Transformacao
 
@@ -50,6 +57,9 @@ if __name__ == "__main__":
     url_pasta = 'https://drive.google.com/drive/folders/1I0gkzrUS6Bast_nX95wDB4_qe1Lwwszw'
     diretorio_local = './pasta_gdown'
     #baixar_os_arquivos_do_google_drive(url_pasta,diretorio_local)
-    arquivos = listar_arquivos_csv(diretorio_local)
-    dataframe_duckdb =  ler_csv(arquivos)
-    transformar(dataframe_duckdb)
+    lista_de_arquivos = listar_arquivos_csv(diretorio_local)
+
+    for caminho_do_arquivo in lista_de_arquivos:
+        duck_db_df = ler_csv(caminho_do_arquivo)
+        pandas_df_transformado = transformar(duck_db_df)
+        salvar_no_postgres(pandas_df_transformado, "vendas_calculado")
