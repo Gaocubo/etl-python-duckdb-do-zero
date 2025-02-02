@@ -8,9 +8,33 @@ from dotenv import load_dotenv
 from duckdb import DuckDBPyRelation
 from pandas import DataFrame
 
+from datetime import datetime
+
 load_dotenv()
 
-from datetime import datetime
+def conectar_banco():
+    """Conecta ao banco de dados DuckDB; cria o banco se não existir."""
+    return duckdb.connect(database='duckdb.db', read_only=False)
+
+def inicializar_tabela(con):
+    """Cria a tabela se ela não existir."""
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS historico_arquivos (
+            nome_arquivo VARCHAR,
+            horario_processamento TIMESTAMP
+        )
+    """)
+
+def registrar_arquivo(con, nome_arquivo):
+    """Registra um novo arquivo no banco de dados com o horário atual."""
+    con.execute("""
+        INSERT INTO historico_arquivos (nome_arquivo, horario_processamento)
+        VALUES (?, ?)
+    """, (nome_arquivo, datetime.now()))
+
+def arquivos_processados(con):
+    """Retorna um set com os nomes de todos os arquivos já processados."""
+    return set(row[0] for row in con.execute("SELECT nome_arquivo FROM historico_arquivos").fetchall())
 
 url_pasta = 'https://drive.google.com/drive/folders/1I0gkzrUS6Bast_nX95wDB4_qe1Lwwszw'
 diretorio_local = './pasta_gdown'
@@ -58,8 +82,17 @@ if __name__ == "__main__":
     diretorio_local = './pasta_gdown'
     #baixar_os_arquivos_do_google_drive(url_pasta,diretorio_local)
     lista_de_arquivos = listar_arquivos_csv(diretorio_local)
+    con = conectar_banco()
+    inicializar_tabela(con)
+    processados = arquivos_processados(con)
 
     for caminho_do_arquivo in lista_de_arquivos:
-        duck_db_df = ler_csv(caminho_do_arquivo)
-        pandas_df_transformado = transformar(duck_db_df)
-        salvar_no_postgres(pandas_df_transformado, "vendas_calculado")
+        nome_arquivo = os.path.basename(caminho_do_arquivo)
+        if nome_arquivo not in processados:
+            df = ler_csv(caminho_do_arquivo)
+            df_transformado = transformar(df)
+            salvar_no_postgres(df_transformado, "vendas_calculado")
+            registrar_arquivo(con, nome_arquivo)
+            print(f"Arquivo {nome_arquivo} processado e salvo.")
+        else:
+            print(f"Arquivo {nome_arquivo} já foi processado anteriormente.")
