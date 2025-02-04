@@ -71,17 +71,16 @@ def salvar_no_postgres(df, tabela):
     engine = create_engine(DATABASE_URL)
     df.to_sql(tabela, con=engine, if_exists='append', index=False)
 
-def pipeline():
-    url_pasta = 'https://drive.google.com/drive/folders/1I0gkzrUS6Bast_nX95wDB4_qe1Lwwszw'
+if __name__ == "__main__":
+    url_pasta = 'https://drive.google.com/drive/folders/1maqV7E3NRlHp12CsI4dvrCFYwYi7BAAf'
     diretorio_local = './pasta_gdown'
 
-    # baixar_pasta_google_drive(url_pasta, diretorio_local)
+    baixar_pasta_google_drive(url_pasta, diretorio_local)
     con = conectar_banco()
     inicializar_tabela(con)
     processados = arquivos_processados(con)
     arquivos_e_tipos = listar_arquivos_e_tipos(diretorio_local)
 
-    logs = []
     for caminho_do_arquivo, tipo in arquivos_e_tipos:
         nome_arquivo = os.path.basename(caminho_do_arquivo)
         if nome_arquivo not in processados:
@@ -90,14 +89,5 @@ def pipeline():
             salvar_no_postgres(df_transformado, "vendas_calculado")
             registrar_arquivo(con, nome_arquivo)
             print(f"Arquivo {nome_arquivo} processado e salvo.")
-            logs.append(f"Arquivo {nome_arquivo} processado e salvo.")
-
         else:
             print(f"Arquivo {nome_arquivo} já foi processado anteriormente.")
-            logs.append(f"Arquivo {nome_arquivo} já foi processado anteriormente.")
-
-    return logs
-    
-
-if __name__ == "__main__":
-    pipeline()
