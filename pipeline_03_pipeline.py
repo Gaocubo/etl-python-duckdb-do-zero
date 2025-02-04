@@ -10,11 +10,9 @@ from datetime import datetime
 load_dotenv()
 
 def conectar_banco():
-    """Conecta ao banco de dados DuckDB; cria o banco se não existir."""
     return duckdb.connect(database='duckdb.db', read_only=False)
 
 def inicializar_tabela(con):
-    """Cria a tabela se ela não existir."""
     con.execute("""
         CREATE TABLE IF NOT EXISTS historico_arquivos (
             nome_arquivo VARCHAR,
@@ -23,22 +21,19 @@ def inicializar_tabela(con):
     """)
 
 def registrar_arquivo(con, nome_arquivo):
-    """Registra um novo arquivo no banco de dados com o horário atual."""
     con.execute("""
         INSERT INTO historico_arquivos (nome_arquivo, horario_processamento)
         VALUES (?, ?)
     """, (nome_arquivo, datetime.now()))
 
 def arquivos_processados(con):
-    """Retorna um set com os nomes de todos os arquivos já processados."""
     return set(row[0] for row in con.execute("SELECT nome_arquivo FROM historico_arquivos").fetchall())
 
 def baixar_pasta_google_drive(url_pasta, diretorio_local):
     os.makedirs(diretorio_local, exist_ok=True)
-    gdown.download_folder(url_pasta, output=diretorio_local, quiet=False, use_cookies=False)
+    gdown.download_folder(url_pasta, output=diretorio_local, quiet=False, use_cookies=True)
 
 def listar_arquivos_e_tipos(diretorio):
-    """Lista arquivos e identifica se são CSV, JSON ou Parquet."""
     arquivos_e_tipos = []
     for arquivo in os.listdir(diretorio):
         if arquivo.endswith(".csv") or arquivo.endswith(".json") or arquivo.endswith(".parquet"):
@@ -48,7 +43,6 @@ def listar_arquivos_e_tipos(diretorio):
     return arquivos_e_tipos
 
 def ler_arquivo(caminho_do_arquivo, tipo):
-    """Lê o arquivo de acordo com seu tipo e retorna um DataFrame."""
     if tipo == 'csv':
         return duckdb.read_csv(caminho_do_arquivo)
     elif tipo == 'json':
@@ -66,22 +60,20 @@ def transformar(df):
     return df_transformado
 
 def salvar_no_postgres(df, tabela):
-    """Salva o DataFrame no PostgreSQL."""
     DATABASE_URL = os.getenv("DATABASE_URL")
     engine = create_engine(DATABASE_URL)
     df.to_sql(tabela, con=engine, if_exists='append', index=False)
 
 def pipeline():
-    url_pasta = 'https://drive.google.com/drive/folders/1I0gkzrUS6Bast_nX95wDB4_qe1Lwwszw'
+    url_pasta = 'https://drive.google.com/drive/folders/1maqV7E3NRlHp12CsI4dvrCFYwYi7BAAf'
     diretorio_local = './pasta_gdown'
 
-    # baixar_pasta_google_drive(url_pasta, diretorio_local)
+    baixar_pasta_google_drive(url_pasta, diretorio_local)
     con = conectar_banco()
     inicializar_tabela(con)
     processados = arquivos_processados(con)
     arquivos_e_tipos = listar_arquivos_e_tipos(diretorio_local)
 
-    logs = []
     for caminho_do_arquivo, tipo in arquivos_e_tipos:
         nome_arquivo = os.path.basename(caminho_do_arquivo)
         if nome_arquivo not in processados:
@@ -90,14 +82,8 @@ def pipeline():
             salvar_no_postgres(df_transformado, "vendas_calculado")
             registrar_arquivo(con, nome_arquivo)
             print(f"Arquivo {nome_arquivo} processado e salvo.")
-            logs.append(f"Arquivo {nome_arquivo} processado e salvo.")
-
         else:
             print(f"Arquivo {nome_arquivo} já foi processado anteriormente.")
-            logs.append(f"Arquivo {nome_arquivo} já foi processado anteriormente.")
-
-    return logs
-    
 
 if __name__ == "__main__":
     pipeline()
